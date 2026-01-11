@@ -1,30 +1,31 @@
 import requests
 import csv
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 
-# ================= CONFIGURACIÓN =================
+# ================= ZONA HORARIA =================
+TZ_OFFSET = -5  # Perú UTC-5
+# ===============================================
+
+# ================= WEATHERLINK ==================
 API_KEY = os.getenv("WEATHERLINK_API_KEY")
 API_SECRET = os.getenv("WEATHERLINK_API_SECRET")
 STATION_ID = 200333
 
-BASE_DIR = "."
-CSV_FILE = os.path.join(BASE_DIR, "lluvia_200333.csv")
-TMP_FILE = os.path.join(BASE_DIR, "lluvia_200333.tmp")
-STATE_FILE = os.path.join(BASE_DIR, "ultimo_acumulado.txt")
-
 URL = f"https://api.weatherlink.com/v2/current/{STATION_ID}?api-key={API_KEY}"
 HEADERS = {"X-Api-Secret": API_SECRET}
-# =================================================
+# ===============================================
+
+CSV_FILE = "lluvia_200333.csv"
+STATE_FILE = "ultimo_acumulado.txt"
 
 
 def main():
-    # --- pedir datos ---
+    # 1️⃣ Obtener datos de WeatherLink
     r = requests.get(URL, headers=HEADERS, timeout=30)
     r.raise_for_status()
     data = r.json()
 
-    # --- extraer lluvia diaria ---
     rainfall_day_mm = None
     for sensor in data.get("sensors", []):
         if sensor.get("sensor_type") == 50:
@@ -34,39 +35,30 @@ def main():
     if rainfall_day_mm is None:
         raise RuntimeError("No se encontró rainfall_day_mm")
 
-    # --- leer estado anterior ---
+    # 2️⃣ Leer acumulado anterior
     if os.path.exists(STATE_FILE):
-        with open(STATE_FILE, "r", encoding="utf-8") as f:
+        with open(STATE_FILE, "r") as f:
             prev = float(f.read().strip())
     else:
         prev = rainfall_day_mm
 
     lluvia_5min = max(0.0, rainfall_day_mm - prev)
 
-    # --- guardar nuevo estado ---
-    with open(STATE_FILE, "w", encoding="utf-8") as f:
+    # 3️⃣ Guardar nuevo acumulado
+    with open(STATE_FILE, "w") as f:
         f.write(str(rainfall_day_mm))
 
-    # --- leer CSV existente ---
-    rows = []
-    if os.path.exists(CSV_FILE):
-        with open(CSV_FILE, "r", encoding="utf-8", newline="") as f:
-            rows = list(csv.reader(f))
+    # 4️⃣ Hora Perú
+    now = (datetime.utcnow() + timedelta(hours=TZ_OFFSET)).strftime("%Y-%m-%d %H:%M")
 
-    if not rows:
-        rows.append(["fecha_hora", "station_id", "lluvia_mm_5min"])
+    # 5️⃣ Crear CSV si no existe
+    existe = os.path.exists(CSV_FILE)
 
-    # --- agregar nueva fila ---
-    now = datetime.utcnow().strftime("%Y-%m-%d %H:%M")
-    rows.append([now, STATION_ID, f"{lluvia_5min:.2f}"])
-
-    # --- escribir archivo temporal ---
-    with open(TMP_FILE, "w", encoding="utf-8", newline="") as f:
+    with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerows(rows)
-
-    # --- reemplazo ---
-    os.replace(TMP_FILE, CSV_FILE)
+        if not existe:
+            writer.writerow(["fecha_hora", "station_id", "lluvia_mm_5min"])
+        writer.writerow([now, STATION_ID, f"{lluvia_5min:.2f}"])
 
 
 if __name__ == "__main__":
