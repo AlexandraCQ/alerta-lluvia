@@ -10,19 +10,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: true
 
-      - uses: actions/setup-python@v5
+      - name: Setup Python
+        uses: actions/setup-python@v5
         with:
           python-version: "3.11"
 
-      - run: pip install -r requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt
 
-      - run: |
-          python lluvia.py
-          python alerta.py
+      - name: Run scripts
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           WEATHERLINK_API_KEY: ${{ secrets.WEATHERLINK_API_KEY }}
           WEATHERLINK_API_SECRET: ${{ secrets.WEATHERLINK_API_SECRET }}
+        run: |
+          python lluvia.py
+          python alerta.py
+
+      - name: Commit CSV and state
+        run: |
+          git config user.name "github-actions"
+          git config user.email "github-actions@github.com"
+          git add lluvia_200333.csv estado_alerta.txt || true
+          git commit -m "update rain data" || echo "No changes to commit"
+          git push
+
