@@ -27,39 +27,42 @@ def main():
     data = r.json()
 
     rainfall_day_mm = None
+
     for sensor in data.get("sensors", []):
         if sensor.get("sensor_type") == 50:
-            rainfall_day_mm = sensor["data"][0]["rainfall_day_mm"]
+            rainfall_day_mm = sensor["data"][0].get("rainfall_day_mm")
             break
 
     if rainfall_day_mm is None:
         raise RuntimeError("No se encontró rainfall_day_mm")
 
-    # 2️⃣ Leer acumulado anterior
+    # 2️⃣ Leer acumulado anterior (persistente)
     if os.path.exists(STATE_FILE):
         with open(STATE_FILE, "r") as f:
             prev = float(f.read().strip())
     else:
-        prev = rainfall_day_mm
+        prev = rainfall_day_mm  # primera ejecución
 
-    lluvia_5min = max(0.0, rainfall_day_mm - prev)
+    # 3️⃣ Calcular lluvia últimos 5 minutos
+    lluvia_5min = max(0.0, round(rainfall_day_mm - prev, 3))
 
-    # 3️⃣ Guardar nuevo acumulado
+    # 4️⃣ Guardar acumulado actual para próxima ejecución
     with open(STATE_FILE, "w") as f:
         f.write(str(rainfall_day_mm))
 
-    # 4️⃣ Hora Perú
+    # 5️⃣ Hora Perú
     now = (datetime.utcnow() + timedelta(hours=TZ_OFFSET)).strftime("%Y-%m-%d %H:%M")
 
-    # 5️⃣ Crear CSV si no existe
+    # 6️⃣ Guardar CSV
     existe = os.path.exists(CSV_FILE)
 
     with open(CSV_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         if not existe:
             writer.writerow(["fecha_hora", "station_id", "lluvia_mm_5min"])
-        writer.writerow([now, STATION_ID, f"{lluvia_5min:.2f}"])
+        writer.writerow([now, STATION_ID, lluvia_5min])
 
 
 if __name__ == "__main__":
     main()
+
